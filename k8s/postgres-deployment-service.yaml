@@ -1,0 +1,99 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-it-secret
+type: Opaque
+stringData:
+  POSTGRES_USER: testuser
+  POSTGRES_PASSWORD: testpass
+  POSTGRES_DB: testdb
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-it
+  labels:
+    app: postgres-it
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-it
+  template:
+    metadata:
+      labels:
+        app: postgres-it
+    spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/postgres-rootless:latest
+          imagePullPolicy: Always
+          ports:
+            - name: pg
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-it-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-it-secret
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-it-secret
+                  key: POSTGRES_DB
+            - name: PGDATA
+              value: /opt/app-root/src/postgresql/data
+          volumeMounts:
+            - name: pgdata
+              mountPath: /opt/app-root/src/postgresql
+          readinessProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsNonRoot: true
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+      volumes:
+        - name: pgdata
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-it
+  labels:
+    app: postgres-it
+spec:
+  selector:
+    app: postgres-it
+  ports:
+    - name: pg
+      port: 5432
+      targetPort: pg
+      protocol: TCP
+  type: ClusterIP

@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-rootless-build-assets
+  labels:
+    app: postgres-it
+data:
+  run-postgresql.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    : "${POSTGRES_USER:=postgres}"
+    : "${POSTGRES_PASSWORD:=postgres}"
+    : "${POSTGRES_DB:=postgres}"
+    : "${PGDATA:=/opt/app-root/src/postgresql/data}"
+
+    export PATH=/usr/bin:$PATH
+
+    mkdir -p "${PGDATA}"
+    chmod 700 "${PGDATA}" || true
+
+    if [ ! -s "${PGDATA}/PG_VERSION" ]; then
+      echo "Initializing database in ${PGDATA} ..."
+      initdb -D "${PGDATA}"
+
+      pg_ctl -D "${PGDATA}" -o "-c listen_addresses='localhost' -p 5432" -w start
+
+      psql -v ON_ERROR_STOP=1 --username postgres <<-EOSQL
+        DO \$\$
+        BEGIN
+          IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${POSTGRES_USER}') THEN
+            CREATE ROLE ${POSTGRES_USER} LOGIN PASSWORD '${POSTGRES_PASSWORD}';
+          END IF;
+        END
+        \$\$;
+    EOSQL
+
+      psql -v ON_ERROR_STOP=1 --username postgres <<-EOSQL
+        SELECT 'CREATE DATABASE ${POSTGRES_DB} OWNER ${POSTGRES_USER}'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${POSTGRES_DB}')\gexec
+    EOSQL
+
+      pg_ctl -D "${PGDATA}" -m fast -w stop
+    fi
+
+    exec postgres -D "${PGDATA}" \
+      -c listen_addresses='*' \
+      -c port=5432 \
+      -c max_connections=100

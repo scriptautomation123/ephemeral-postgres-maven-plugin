@@ -1,0 +1,3 @@
+        - name: postgres
+          image: image-registry.openshift-image-registry.svc:5000/<your-namespace>/postgres-rootless:latest
+          imagePullPolicy: IfNotPresent

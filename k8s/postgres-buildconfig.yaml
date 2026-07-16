@@ -1,0 +1,65 @@
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: postgres-rootless
+  labels:
+    app: postgres-it
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: postgres-rootless
+  labels:
+    app: postgres-it
+spec:
+  runPolicy: Serial
+  source:
+    type: Dockerfile
+    dockerfile: |
+      FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
+
+      USER 0
+      RUN microdnf -y update && \
+          microdnf -y install \
+            postgresql-server \
+            postgresql \
+            shadow-utils \
+            findutils \
+            hostname \
+            tar \
+            gzip && \
+          microdnf clean all
+
+      ENV APP_ROOT=/opt/app-root \
+          PGDATA=/opt/app-root/src/postgresql/data \
+          PATH=/usr/bin:$PATH
+
+      RUN mkdir -p /opt/app-root/src/postgresql /docker-entrypoint-initdb.d && \
+          chgrp -R 0 /opt/app-root /docker-entrypoint-initdb.d && \
+          chmod -R g=u /opt/app-root /docker-entrypoint-initdb.d
+
+      COPY run-postgresql.sh /usr/local/bin/run-postgresql.sh
+      RUN chmod 0755 /usr/local/bin/run-postgresql.sh && \
+          chgrp 0 /usr/local/bin/run-postgresql.sh && \
+          chmod g=u /usr/local/bin/run-postgresql.sh
+
+      EXPOSE 5432
+      USER 1001
+      ENTRYPOINT ["/usr/local/bin/run-postgresql.sh"]
+    images:
+      - from:
+          kind: DockerImage
+          name: registry.access.redhat.com/ubi9/ubi-minimal:latest
+        paths: []
+    secrets: []
+    configMaps: []
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: postgres-rootless:latest
+  triggers:
+    - type: ConfigChange
