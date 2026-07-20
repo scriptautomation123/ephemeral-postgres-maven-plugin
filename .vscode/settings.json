@@ -1,15 +1,10 @@
 {
     "files.exclude": {
-        "**/.git": true,
-        "**/.svn": true,
-        "**/.hg": true,
-        "**/.DS_Store": true,
-        "**/Thumbs.db": true,
-        "**/.trunk/*actions/": true,
-        "**/.trunk/*logs/": true,
-        "**/.trunk/*notifications/": true,
-        "**/.trunk/*out/": true,
-        "**/.trunk/*plugins/": true
+        "**/.trunk/*actions/": false,
+        "**/.trunk/*logs/": false,
+        "**/.trunk/*notifications/": false,
+        "**/.trunk/*out/": false,
+        "**/.trunk/*plugins/": false
     },
     "hide-files.files": []
 }
